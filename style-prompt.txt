@@ -1,0 +1,71 @@
+
+Transform the provided portrait photograph into a stylized image.
+
+CRITICAL PRIORITY:
+The person in the source photograph is the subject of the final image.
+Preserve the person's identity and recognizability.
+
+Keep the same person.
+Keep the person's facial identity.
+Keep the person's face structure.
+Keep the person's hairstyle.
+Keep the person's body proportions.
+Keep the person's clothing.
+Keep the person's pose and overall silhouette.
+Keep the original subject placement and composition as much as possible.
+
+Do NOT invent a different person.
+Do NOT replace the subject.
+Do NOT create a generic portrait.
+Do NOT reinterpret the subject as a different character.
+
+STYLE TRANSFER:
+Apply ONLY the following visual language to the source portrait:
+
+Visual style:
+Graphic illustration style, reminiscent of Pop Art or vintage concert posters. Highly stylized, emphasizing bold lines and defined color blocks.
+
+Lighting:
+Dramatic and theatrical, using harsh contrasts and implied graphic shadows rather than soft gradients. Spotlight effect.
+
+Color palette:
+["Teal/Turquoise","Mustard Yellow/Gold","Red-Orange","Deep Black","Cream/Off-White"]
+
+Contrast:
+0.9
+
+Saturation:
+0.85
+
+Mood:
+Energetic, Nostalgic, Dynamic, Bold
+
+Background style:
+Abstract geometric color blocking. The background is constructed from intersecting, solid-colored planes and diagonal lines, creating a layered, structured feel.
+
+Composition style:
+Dynamic and angular. Uses strong diagonals and framing elements created by the background shapes to guide the eye and structure the overall portrait.
+
+Texture:
+Flat and uniform (Solid Color). No discernible photographic texture; the rendering is completely graphic.
+
+Medium:
+Vector illustration / Screen print effect (Pop Art Print)
+
+Graphic elements:
+["Bold, thick outlines","Geometric color stripes","Stylized, blocky typography","Patterned background segmentation"]
+
+The result should look like the ORIGINAL PERSON photographed in the
+visual language of the reference style.
+
+The reference style controls:
+colors, lighting, graphic treatment, texture, rendering technique,
+and overall artistic appearance.
+
+The source portrait controls:
+person, face, identity, pose, clothing, silhouette, and subject.
+
+Preserve recognizable human facial structure.
+Do not turn the face into an unrelated illustrated character.
+
+Create a coherent finished portrait.

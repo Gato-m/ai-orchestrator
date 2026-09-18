@@ -1,0 +1,24 @@
+{
+  "visual_style": "Graphic illustration style, reminiscent of Pop Art or vintage concert posters. Highly stylized, emphasizing bold lines and defined color blocks.",
+  "lighting": "Dramatic and theatrical, using harsh contrasts and implied graphic shadows rather than soft gradients. Spotlight effect.",
+  "color_palette": [
+    "Teal/Turquoise",
+    "Mustard Yellow/Gold",
+    "Red-Orange",
+    "Deep Black",
+    "Cream/Off-White"
+  ],
+  "contrast": 0.9,
+  "saturation": 0.85,
+  "mood": "Energetic, Nostalgic, Dynamic, Bold",
+  "background_style": "Abstract geometric color blocking. The background is constructed from intersecting, solid-colored planes and diagonal lines, creating a layered, structured feel.",
+  "composition_style": "Dynamic and angular. Uses strong diagonals and framing elements created by the background shapes to guide the eye and structure the overall portrait.",
+  "texture": "Flat and uniform (Solid Color). No discernible photographic texture; the rendering is completely graphic.",
+  "medium": "Vector illustration / Screen print effect (Pop Art Print)",
+  "graphic_elements": [
+    "Bold, thick outlines",
+    "Geometric color stripes",
+    "Stylized, blocky typography",
+    "Patterned background segmentation"
+  ]
+}

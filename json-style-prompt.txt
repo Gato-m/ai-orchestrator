@@ -1,0 +1,100 @@
+
+Transform the provided portrait photograph into a stylized portrait.
+
+The SOURCE IMAGE contains the person who must remain the main subject.
+
+IDENTITY PRESERVATION IS THE HIGHEST PRIORITY.
+
+Preserve the exact person from the source image.
+Preserve the person's recognizable facial identity.
+Preserve facial proportions and overall face structure.
+Preserve hairstyle and hair shape.
+Preserve body proportions and silhouette.
+Preserve clothing and its overall shape.
+Preserve the person's pose and position.
+Preserve the original subject composition as much as possible.
+
+The final image MUST still clearly depict the same person
+from the source photograph.
+
+Do NOT invent a new person.
+Do NOT replace the person's face.
+Do NOT turn the person into a generic character.
+Do NOT substantially alter the person's facial structure.
+Do NOT change the person's identity.
+
+STYLE TRANSFER
+
+Apply the following visual style to the source portrait.
+
+Visual style:
+Graphic illustration style, reminiscent of Pop Art or vintage concert posters. Highly stylized, emphasizing bold lines and defined color blocks.
+
+Lighting:
+Dramatic and theatrical, using harsh contrasts and implied graphic shadows rather than soft gradients. Spotlight effect.
+
+Color palette:
+["Teal/Turquoise","Mustard Yellow/Gold","Red-Orange","Deep Black","Cream/Off-White"]
+
+Contrast:
+0.9
+
+Saturation:
+0.85
+
+Mood:
+Energetic, Nostalgic, Dynamic, Bold
+
+Background:
+Abstract geometric color blocking. The background is constructed from intersecting, solid-colored planes and diagonal lines, creating a layered, structured feel.
+
+Composition:
+Dynamic and angular. Uses strong diagonals and framing elements created by the background shapes to guide the eye and structure the overall portrait.
+
+Texture:
+Flat and uniform (Solid Color). No discernible photographic texture; the rendering is completely graphic.
+
+Medium:
+Vector illustration / Screen print effect (Pop Art Print)
+
+Photography / illustration style:
+
+
+Graphic elements:
+["Bold, thick outlines","Geometric color stripes","Stylized, blocky typography","Patterned background segmentation"]
+
+IMPORTANT:
+
+The STYLE information controls ONLY the artistic treatment.
+
+The style controls:
+- colors
+- lighting
+- contrast
+- saturation
+- texture
+- rendering technique
+- graphic treatment
+- background treatment
+- overall visual aesthetic
+
+The SOURCE IMAGE controls:
+- person
+- face
+- identity
+- hairstyle
+- body
+- clothing
+- pose
+- silhouette
+- subject placement
+
+Do not copy a different person or subject.
+
+There is no visual style reference image available to copy from.
+Use only the written style description above.
+
+Create a finished stylized portrait that looks like
+the ORIGINAL PERSON rendered in this visual style.
+
+The person's face must remain recognizable.
