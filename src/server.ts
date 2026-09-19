@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { exec } from 'node:child_process';
 
 import { analyzeStyle } from './ollama.js';
 import { queuePrompt, waitForResult } from './comfy.js';
@@ -17,31 +18,180 @@ const WORKFLOW_PATH = path.resolve('style-transfer.json');
 const COMFY_INPUT = '/Users/webdev/ComfyUI-Shared/input';
 
 app.use(express.json());
+app.use(express.static('client')); // Serve static files from client directory
 
 app.get('/', (_req, res) => {
-  res.send('Style Workflow is running');
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Image Stylizer Dashboard</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background-color: #1a1a1a;
+                color: #e0e0e0;
+                margin: 0;
+                padding: 20px;
+                line-height: 1.6;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+                background-color: #2d2d2d;
+                border-radius: 10px;
+                padding: 20px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            }
+            h1 {
+                color: #4caf50;
+                text-align: center;
+            }
+            .endpoint {
+                background-color: #3a3a3a;
+                border-radius: 5px;
+                padding: 15px;
+                margin: 10px 0;
+            }
+            .endpoint h2 {
+                margin-top: 0;
+                color: #8bc34a;
+            }
+            .endpoint pre {
+                background-color: #000;
+                padding: 10px;
+                border-radius: 5px;
+                overflow-x: auto;
+                font-size: 14px;
+            }
+            button {
+                background-color: #4caf50;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                margin: 5px;
+            }
+            button:hover {
+                background-color: #45a049;
+            }
+            .status {
+                padding: 10px;
+                border-radius: 5px;
+                margin: 10px 0;
+            }
+            .status.ok {
+                background-color: #d4edda;
+                color: #155724;
+            }
+            .status.error {
+                background-color: #f8d7da;
+                color: #721c24;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Image Stylizer Dashboard</h1>
+            
+            <div class="status ok">
+                <strong>Status:</strong> Server is running and ready
+            </div>
+            
+            <p>This is the dashboard for the Image Stylizer API. You can use the following endpoints to interact with the system.</p>
+            
+            <div class="endpoint">
+                <h2>1. Analyze Style</h2>
+                <p><strong>Endpoint:</strong> POST /api/analyze-style</p>
+                <p><strong>Description:</strong> Analyzes an image and returns its visual style information</p>
+                <pre>curl -X POST http://localhost:3000/api/analyze-style \\
+  -F "image=@path/to/image.jpg"</pre>
+            </div>
+            
+            <div class="endpoint">
+                <h2>2. Optimize Prompt</h2>
+                <p><strong>Endpoint:</strong> POST /api/optimize-prompt</p>
+                <p><strong>Description:</strong> Optimizes a prompt using Qwen 30B model</p>
+                <pre>curl -X POST http://localhost:3000/api/optimize-prompt \\
+  -H "Content-Type: application/json" \\
+  -d '{"prompt": "A beautiful landscape"}'</pre>
+            </div>
+            
+            <div class="endpoint">
+                <h2>3. Style Transfer</h2>
+                <p><strong>Endpoint:</strong> POST /api/style-transfer</p>
+                <p><strong>Description:</strong> Performs complete style transfer with ComfyUI and FLUX.2 Klein</p>
+                <pre>curl -X POST http://localhost:3000/api/style-transfer \\
+  -F "image=@target.jpg" \\
+  -F "style=@style-reference.jpg"</pre>
+            </div>
+            
+            <p><strong>Current Configuration:</strong></p>
+            <ul>
+                <li>Ollama Model: gemma4:latest</li>
+                <li>ComfyUI URL: http://127.0.0.1:8188</li>
+                <li>Workflow File: ${WORKFLOW_PATH}</li>
+                <li>Upload Directory: uploads/</li>
+            </ul>
+            
+            <p><strong>Next Steps:</strong></p>
+            <ol>
+                <li>Ensure Ollama is running with the Qwen 30B model</li>
+                <li>Ensure ComfyUI is running on port 8188</li>
+                <li>Test any endpoint using curl or a tool like Postman</li>
+            </ol>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <button onclick="window.open('http://localhost:3000', '_blank')">Open in New Tab</button>
+            </div>
+        </div>
+    </body>
+    </html>
+  `);
 });
 
 /**
- * Analyze style image with Ollama
+ * Optimize prompt using Qwen
  */
-app.post('/api/analyze-style', upload.single('image'), async (req, res) => {
-  if (!req.file) {
-    res.status(400).json({
-      error: 'Image is required',
-    });
-    return;
-  }
-
+app.post('/api/optimize-prompt', async (req, res) => {
   try {
-    const analysis = await analyzeStyle(req.file.path);
+    const { prompt } = req.body;
+    
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({
+        error: 'Prompt is required',
+      });
+    }
 
-    res.json(analysis);
+    // Use Ollama to optimize the prompt with Qwen
+    const optimizedPrompt = await new Promise((resolve, reject) => {
+      exec(
+        `ollama run qwen3-coder:30b "Optimize this prompt for image generation: ${prompt}"`,
+        (error, stdout, stderr) => {
+          if (error) {
+            console.error('Qwen prompt optimization error:', error);
+            reject(new Error('Failed to optimize prompt with Qwen'));
+            return;
+          }
+          
+          // Extract the optimized prompt from the response
+          const result = stdout.trim();
+          resolve(result);
+        }
+      );
+    });
+
+    res.json({
+      optimizedPrompt,
+    });
   } catch (error) {
-    console.error('Style analysis error:', error);
+    console.error('Prompt optimization error:', error);
 
     res.status(500).json({
-      error: 'Failed to analyze image',
+      error: 'Failed to optimize prompt',
     });
   }
 });
@@ -144,9 +294,36 @@ Limit colors to 4.
 Do not copy the subject or objects from reference_image2.
 `.trim();
 
-      workflow['92:113'].inputs.text = extraPrompt
-        ? `${basePrompt}\n\nAdditional instructions:\n${extraPrompt}`
-        : basePrompt;
+      // If there's an extra prompt, optimize it with Qwen before using
+      let finalPrompt = basePrompt;
+      if (extraPrompt) {
+        try {
+          // Use Ollama to get optimized version of the extra prompt
+          const optimizedExtraPrompt = await new Promise((resolve, reject) => {
+            exec(
+              `ollama run qwen3-coder:30b "Optimize this prompt for image generation: ${extraPrompt}"`,
+              (error, stdout, stderr) => {
+                if (error) {
+                  console.error('Qwen prompt optimization error:', error);
+                  resolve(extraPrompt); // fallback to original prompt
+                  return;
+                }
+                
+                const result = stdout.trim();
+                resolve(result);
+              }
+            );
+          });
+          
+          finalPrompt = `${basePrompt}\n\nAdditional instructions:\n${optimizedExtraPrompt}`;
+        } catch (error) {
+          console.error('Error optimizing extra prompt:', error);
+          // Continue with original extra prompt if optimization fails
+          finalPrompt = `${basePrompt}\n\nAdditional instructions:\n${extraPrompt}`;
+        }
+      }
+
+      workflow['92:113'].inputs.text = finalPrompt;
 
       console.log('Queueing style transfer...');
       console.log('Target:', targetName);
@@ -214,5 +391,11 @@ Do not copy the subject or objects from reference_image2.
 );
 
 app.listen(PORT, () => {
-  console.log(`Style Workflow: http://localhost:${PORT}`);
+  console.log(`Style Workflow Dashboard: http://localhost:${PORT}`);
+  console.log(`Please open your browser to http://localhost:${PORT}`);
+});
+
+// Add a simple health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });

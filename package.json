@@ -4,16 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx src/server.ts"
+    "dev": "tsx src/server.ts",
+    "dev:client": "cd client && npm run dev",
+    "start": "node dist/server.js",
+    "build": "tsc"
   },
   "dependencies": {
     "express": "^5.1.0",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "ollama": "^0.4.6"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
     "@types/multer": "^2.0.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.13.6",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
   }

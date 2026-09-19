@@ -1,0 +1,1 @@
+{"version":3,"file":"comfy.d.ts","sourceRoot":"","sources":["../src/comfy.ts"],"names":[],"mappings":"AAEA,KAAK,QAAQ,GAAG,MAAM,CAAC,MAAM,EAAE,GAAG,CAAC,CAAC;AAGpC,wBAAsB,WAAW,CAAC,QAAQ,EAAE,QAAQ,gBAiBnD;AAED,wBAAsB,UAAU,CAAC,QAAQ,EAAE,MAAM,gBAQhD;AAED,wBAAsB,aAAa,CACjC,QAAQ,EAAE,MAAM,EAChB,SAAS,SAAiB,gBAe3B"}

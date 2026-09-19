@@ -1,6 +1,7 @@
 const COMFY_URL = "http://127.0.0.1:8188";
 
 type Workflow = Record<string, any>;
+type HistoryResponse = Record<string, any>;
 
 export async function queuePrompt(workflow: Workflow) {
   const response = await fetch(`${COMFY_URL}/prompt`, {
@@ -38,7 +39,7 @@ export async function waitForResult(
   const started = Date.now();
 
   while (Date.now() - started < timeoutMs) {
-    const history = await getHistory(promptId);
+    const history: HistoryResponse = await getHistory(promptId);
 
     if (history[promptId]) {
       return history[promptId];

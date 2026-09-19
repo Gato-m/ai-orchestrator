@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Style Workflow Dashboard</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #2d2d2d;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            color: #4caf50;
+            text-align: center;
+        }
+        .endpoint {
+            background-color: #3a3a3a;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .endpoint h2 {
+            margin-top: 0;
+            color: #8bc34a;
+        }
+        .endpoint pre {
+            background-color: #000;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 14px;
+        }
+        button {
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status.ok {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Image Stylizer Dashboard</h1>
+        
+        <div class="status ok">
+            <strong>Status:</strong> Server is running and ready
+        </div>
+        
+        <p>This is the dashboard for the Image Stylizer API. You can use the following endpoints to interact with the system.</p>
+        
+        <div class="endpoint">
+            <h2>1. Analyze Style</h2>
+            <p><strong>Endpoint:</strong> POST /api/analyze-style</p>
+            <p><strong>Description:</strong> Analyzes an image and returns its visual style information</p>
+            <pre>curl -X POST http://localhost:3000/api/analyze-style \\
+  -F "image=@path/to/image.jpg"</pre>
+        </div>
+        
+        <div class="endpoint">
+            <h2>2. Optimize Prompt</h2>
+            <p><strong>Endpoint:</strong> POST /api/optimize-prompt</p>
+            <p><strong>Description:</strong> Optimizes a prompt using Qwen 30B model</p>
+            <pre>curl -X POST http://localhost:3000/api/optimize-prompt \\
+  -H "Content-Type: application/json" \\
+  -d '{"prompt": "A beautiful landscape"}'</pre>
+        </div>
+        
+        <div class="endpoint">
+            <h2>3. Style Transfer</h2>
+            <p><strong>Endpoint:</strong> POST /api/style-transfer</p>
+            <p><strong>Description:</strong> Performs complete style transfer with ComfyUI and FLUX.2 Klein</p>
+            <pre>curl -X POST http://localhost:3000/api/style-transfer \\
+  -F "image=@target.jpg" \\
+  -F "style=@style-reference.jpg"</pre>
+        </div>
+        
+        <p><strong>Current Configuration:</strong></p>
+        <ul>
+            <li>Ollama Model: gemma4:latest</li>
+            <li>ComfyUI URL: http://127.0.0.1:8188</li>
+            <li>Workflow File: /Users/webdev/img-stylizer/style-workflow/style-transfer.json</li>
+            <li>Upload Directory: uploads/</li>
+        </ul>
+        
+        <p><strong>Next Steps:</strong></p>
+        <ol>
+            <li>Ensure Ollama is running with the Qwen 30B model</li>
+            <li>Ensure ComfyUI is running on port 8188</li>
+            <li>Test any endpoint using curl or a tool like Postman</li>
+        </ol>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <button onclick="window.open('http://localhost:3000', '_blank')">Open in New Tab</button>
+        </div>
+    </div>
+</body>
+</html>
