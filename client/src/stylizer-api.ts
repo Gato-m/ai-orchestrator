@@ -12,39 +12,72 @@ export class StylizerAPI {
   private baseUrl: string;
 
   constructor() {
-    // Use environment variable or default to localhost
-    this.baseUrl = import.meta.env?.VITE_API_URL || '/api';
+    // Tiešais savienojums ar Express backend portu 3000
+    this.baseUrl = 'http://127.0.0.1:3000';
   }
 
   /**
-   * Analyze the style of an image
+   * Palīgfunkcija File objekta konvertēšanai uz Base64 teksta virkni
    */
-  async analyzeStyle(imageFile: File): Promise<StyleAnalysis> {
-    const formData = new FormData();
-    formData.append('image', imageFile);
+  private fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  }
 
+  /**
+   * Attēla stila analīze ar Ollama (llava)
+   * Pieņem gan Base64 tekstu, gan File objektu.
+   */
+  async analyzeStyle(imageInput: string | File): Promise<string> {
     try {
+      let base64String = '';
+
+      if (imageInput instanceof File) {
+        base64String = await this.fileToBase64(imageInput);
+      } else if (typeof imageInput === 'string') {
+        base64String = imageInput;
+      } else {
+        throw new Error('Nekorekts attēla formāts. Gaidīts File vai Base64 string.');
+      }
+
+      if (!base64String || base64String.trim() === '') {
+        throw new Error('Attēla Base64 dati ir tukši.');
+      }
+
       const response = await fetch(`${this.baseUrl}/api/analyze-style`, {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageBase64: base64String }),
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to analyze style: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server returned status ${response.status}`);
       }
 
       const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error analyzing style:', error);
+
+      if (!data.styleDescription) {
+        throw new Error('Serveris neatgrieza stila aprakstu');
+      }
+
+      return data.styleDescription;
+    } catch (error: any) {
+      console.error('Kļūda izpildot analyzeStyle:', error);
       throw error;
     }
   }
 
   /**
-   * Optimize a prompt for better stylization results
+   * Prompta optimizācija ar Qwen
    */
-  async optimizePrompt(prompt: string): Promise<{ optimized_prompt: string }> {
+  async optimizePrompt(prompt: string): Promise<{ optimizedPrompt: string }> {
     try {
       const response = await fetch(`${this.baseUrl}/api/optimize-prompt`, {
         method: 'POST',
@@ -55,7 +88,8 @@ export class StylizerAPI {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to optimize prompt: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to optimize prompt: ${response.status}`);
       }
 
       const data = await response.json();
@@ -67,17 +101,20 @@ export class StylizerAPI {
   }
 
   /**
-   * Perform style transfer on target and style images
+   * Stila pārnese (Style Transfer) ar ComfyUI
    */
   async styleTransfer(
     targetImage: File,
     styleImage: File,
-    prompt: string
-  ): Promise<{ result_url: string }> {
+    prompt: string,
+    styleStrength: number = 30
+  ): Promise<{ success: boolean; image: string; promptId: string }> {
     const formData = new FormData();
-    formData.append('target_image', targetImage);
-    formData.append('style_image', styleImage);
+    // Atbilst multer upload.fields([{ name: 'image' }, { name: 'style' }])
+    formData.append('image', targetImage);
+    formData.append('style', styleImage);
     formData.append('prompt', prompt);
+    formData.append('styleStrength', styleStrength.toString());
 
     try {
       const response = await fetch(`${this.baseUrl}/api/style-transfer`, {
@@ -86,7 +123,8 @@ export class StylizerAPI {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to perform style transfer: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to perform style transfer: ${response.status}`);
       }
 
       const data = await response.json();
@@ -98,7 +136,7 @@ export class StylizerAPI {
   }
 
   /**
-   * Get all generated images
+   * Iegūst visus ģenerētos attēlus
    */
   async getGeneratedImages(): Promise<GeneratedImage[]> {
     try {
@@ -107,7 +145,8 @@ export class StylizerAPI {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch generated images: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to fetch generated images: ${response.status}`);
       }
 
       const data = await response.json();

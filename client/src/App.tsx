@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { StylizerAPI } from './stylizer-api';
-import { StyleAnalysis, ImageUploadState, ProcessingState } from './types';
+import { ProcessingState } from './types';
 
 // Inicializē API klientu
 const apiClient = new StylizerAPI();
 
 function App() {
-  // State management - Trūkstošie failu stāvokļi
+  // State management - Attēlu un teksta stāvokļi
   const [targetImage, setTargetImage] = useState<File | null>(null);
   const [styleImage, setStyleImage] = useState<File | null>(null);
   const [targetImageUrl, setTargetImageUrl] = useState<string | null>(null);
@@ -59,7 +59,7 @@ function App() {
     }
   };
 
-  // Analyze style of the style image
+  // Analyze style of the style image (SALABOTS: strādā ar teksta virkni)
   const handleAnalyzeStyle = async () => {
     if (!styleImage) {
       setProcessingState(prev => ({ ...prev, error: 'Please select a style image first' }));
@@ -73,25 +73,24 @@ function App() {
     }));
 
     try {
-      const analysis = await apiClient.analyzeStyle(styleImage);
-      const enhanced = `Create an image in the style of ${analysis.style}, with ${analysis.colors.join(', ')}, and ${analysis.composition} composition`;
-      setEnhancedPrompt(enhanced);
-      setCurrentPrompt(enhanced);
-    } catch (error) {
+      const analysisText = await apiClient.analyzeStyle(styleImage);
+      setEnhancedPrompt(analysisText);
+      setCurrentPrompt(analysisText);
+    } catch (error: any) {
       console.error('Error analyzing style:', error);
       setProcessingState(prev => ({
         ...prev,
-        error: 'Failed to analyze style. Please try again.'
+        error: error.message || 'Failed to analyze style. Please try again.'
       }));
     } finally {
       setProcessingState(prev => ({ ...prev, isAnalyzing: false }));
     }
   };
 
-  // Optimize the prompt
+  // Optimize the prompt (SALABOTS: atbalsta `optimizedPrompt` atslēgu)
   const handleOptimizePrompt = async () => {
     if (!enhancedPrompt) {
-      setProcessingState(prev => ({ ...prev, error: 'Please analyze a style first' }));
+      setProcessingState(prev => ({ ...prev, error: 'Please analyze a style first or write a prompt' }));
       return;
     }
 
@@ -103,20 +102,21 @@ function App() {
 
     try {
       const result = await apiClient.optimizePrompt(enhancedPrompt);
-      setEnhancedPrompt(result.optimized_prompt);
-      setCurrentPrompt(result.optimized_prompt);
-    } catch (error) {
+      const textResult = result.optimizedPrompt || (result as any).optimized_prompt || enhancedPrompt;
+      setEnhancedPrompt(textResult);
+      setCurrentPrompt(textResult);
+    } catch (error: any) {
       console.error('Error optimizing prompt:', error);
       setProcessingState(prev => ({
         ...prev,
-        error: 'Failed to optimize prompt. Please try again.'
+        error: error.message || 'Failed to optimize prompt. Please try again.'
       }));
     } finally {
       setProcessingState(prev => ({ ...prev, isOptimizing: false }));
     }
   };
 
-  // Perform style transfer
+  // Perform style transfer (SALABOTS: atbalsta `image` un `result_url`)
   const handleStyleTransfer = async () => {
     if (!targetImage || !styleImage) {
       setProcessingState(prev => ({
@@ -133,17 +133,16 @@ function App() {
       error: null
     }));
 
-    try {
-      const interval = setInterval(() => {
-        setProcessingState(prev => {
-          if (prev.progress >= 100) {
-            clearInterval(interval);
-            return { ...prev, isProcessing: false };
-          }
-          return { ...prev, progress: prev.progress + 10 };
-        });
-      }, 200);
+    const interval = setInterval(() => {
+      setProcessingState(prev => {
+        if (prev.progress >= 90) {
+          return prev;
+        }
+        return { ...prev, progress: prev.progress + 10 };
+      });
+    }, 500);
 
+    try {
       const result = await apiClient.styleTransfer(targetImage, styleImage, enhancedPrompt);
 
       clearInterval(interval);
@@ -153,12 +152,15 @@ function App() {
         progress: 100
       }));
 
-      setGeneratedImage(result.result_url);
-    } catch (error) {
+      const finalImageUrl = result.image || (result as any).result_url;
+      setGeneratedImage(finalImageUrl);
+    } catch (error: any) {
+      clearInterval(interval);
       console.error('Error in style transfer:', error);
       setProcessingState(prev => ({
         ...prev,
-        error: 'Failed to perform style transfer. Please try again.'
+        isProcessing: false,
+        error: error.message || 'Failed to perform style transfer. Please try again.'
       }));
     }
   };
@@ -340,7 +342,10 @@ function App() {
               id="prompt"
               rows={3}
               value={enhancedPrompt}
-              onChange={(e) => setEnhancedPrompt(e.target.value)}
+              onChange={(e) => {
+                setEnhancedPrompt(e.target.value);
+                setCurrentPrompt(e.target.value);
+              }}
               className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Enhanced prompt will appear after analyzing the style image..."
             />
@@ -354,7 +359,7 @@ function App() {
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between mb-6">
             <div className="flex-1">
               <p className="text-sm text-gray-400 mb-2">Current Prompt:</p>
-              <p className="bg-gray-700/50 p-3 rounded-lg text-sm truncate">{currentPrompt}</p>
+              <p className="bg-gray-700/50 p-3 rounded-lg text-sm break-words">{currentPrompt}</p>
             </div>
           </div>
 
@@ -376,7 +381,7 @@ function App() {
 
           {/* Error message */}
           {processingState.error && (
-            <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm">
+            <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-200">
               {processingState.error}
             </div>
           )}
