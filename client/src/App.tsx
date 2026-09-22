@@ -211,17 +211,30 @@ function App() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           {/* Target Image Upload */}
           <div
-            className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-gray-600 transition-colors"
+            className="bg-gray-800 rounded-xl p-6 mb-8 border border-gray-700 panel-lighting"
             onDrop={handleTargetDrop}
             onDragOver={(e) => e.preventDefault()}
           >
-            <h2 className="text-lg font-semibold mb-4">Target Image</h2>
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-lg font-semibold">Target Image</h2>
+              {targetImageUrl && (
+                <button
+                  onClick={() => {
+                    setTargetImage(null);
+                    setTargetImageUrl(null);
+                  }}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors"
+                >
+                  Change Image
+                </button>
+              )}
+            </div>
             {targetImageUrl ? (
               <div className="flex justify-center">
                 <img
                   src={targetImageUrl}
                   alt="Target"
-                  className="max-h-64 rounded-lg object-contain"
+                  className="max-h-64 rounded-lg object-contain mb-4"
                 />
               </div>
             ) : (
@@ -246,17 +259,30 @@ function App() {
 
           {/* Style Image Upload */}
           <div
-            className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-gray-600 transition-colors"
+            className="bg-gray-800 rounded-xl p-6 mb-8 border border-gray-700 panel-lighting"
             onDrop={handleStyleDrop}
             onDragOver={(e) => e.preventDefault()}
           >
-            <h2 className="text-lg font-semibold mb-4">Style Image</h2>
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-lg font-semibold">Style Image</h2>
+              {styleImageUrl && (
+                <button
+                  onClick={() => {
+                    setStyleImage(null);
+                    setStyleImageUrl(null);
+                  }}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors"
+                >
+                  Change Image
+                </button>
+              )}
+            </div>
             {styleImageUrl ? (
               <div className="flex justify-center">
                 <img
                   src={styleImageUrl}
                   alt="Style"
-                  className="max-h-64 rounded-lg object-contain"
+                  className="max-h-64 rounded-lg object-contain mb-4"
                 />
               </div>
             ) : (
