@@ -3,9 +3,7 @@ import multer from 'multer';
 import cors from 'cors';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { exec } from 'node:child_process';
 
-import { analyzeStyle } from './ollama.js';
 import { queuePrompt, waitForResult } from './comfy.js';
 
 const app = express();
@@ -34,7 +32,7 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Stila analīzes galapunkts ar Ollama (llava)
+// 1. Stila analīzes galapunkts ar Ollama (llava)
 app.post('/api/analyze-style', async (req, res) => {
   try {
     const rawImage = req.body.imageBase64 || req.body.image || req.body.imageData;
@@ -61,7 +59,7 @@ app.post('/api/analyze-style', async (req, res) => {
     console.log('🔄 Sūtam pieprasījumu uz Ollama (llava modelis)...');
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90000); // 90 sekunžu timeout
+    const timeout = setTimeout(() => controller.abort(), 90000); // 90 sekunžu limits
 
     const response = await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST',
@@ -71,7 +69,8 @@ app.post('/api/analyze-style', async (req, res) => {
         model: 'llava',
         prompt: 'Analyze the artistic style of this image. Describe lighting, color palette, medium, texture, and mood for an image generator prompt. Output only the prompt text in English.',
         images: [cleanBase64],
-        stream: false
+        stream: false,
+        keep_alive: 0 // <--- Uzreiz izlādē Llava no VRAM atmiņas, lai tā nebūtu bloķēta!
       })
     });
 
@@ -93,42 +92,77 @@ app.post('/api/analyze-style', async (req, res) => {
     res.json({ styleDescription: data.response.trim() });
 
   } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.error('❌ [/api/analyze-style] Pieprasījuma laiks beidzās (Timeout)');
+      return res.status(504).json({ error: 'Stila analīze prasīja pārāk ilgu laiku' });
+    }
     console.error('❌ Servera kļūda /api/analyze-style:', error.message || error);
     res.status(500).json({ error: 'Failed to analyze style', details: error.message });
   }
 });
 
-// Prompta optimizācija ar Qwen
+// 2. Promptu optimizēšana izmantojot ātro Llama 3.2 modeli
 app.post('/api/optimize-prompt', async (req, res) => {
   try {
     const { prompt } = req.body;
 
     if (!prompt || typeof prompt !== 'string') {
-      return res.status(400).json({ error: 'Prompt is required' });
+      return res.status(400).json({ error: 'Trūkst prompta teksta optimizēšanai' });
     }
 
-    const optimizedPrompt = await new Promise((resolve, reject) => {
-      exec(
-        `ollama run qwen3-coder:30b "Optimize this prompt for image generation: ${prompt}"`,
-        (error, stdout) => {
-          if (error) {
-            console.error('Qwen prompt optimization error:', error);
-            reject(new Error('Failed to optimize prompt with Qwen'));
-            return;
-          }
-          resolve(stdout.trim());
-        }
-      );
+    console.log('🔄 Optimizējam promptu ar llama3.2:1b...');
+
+    const targetModel = 'llama3.2:1b';
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000); // 20 sekunžu limits
+
+    const response = await fetch('http://127.0.0.1:11434/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: targetModel,
+        prompt: `You are an expert AI prompt engineer for image generation (Stable Diffusion / Midjourney).
+Refine and optimize the following image prompt to make it descriptive, clear, and high quality.
+Add artistic details, lighting, style terms, and composition cues if needed.
+Provide ONLY the final optimized prompt in English and nothing else. No conversational text, no quotes.
+
+Input prompt: "${prompt}"`,
+        stream: false,
+        keep_alive: 0
+      })
     });
 
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Ollama optimizēšanas kļūda (${response.status}):`, errorText);
+      return res.status(502).json({ error: `Ollama kļūda: ${errorText}` });
+    }
+
+    const data = (await response.json()) as { response?: string };
+
+    if (!data.response) {
+      return res.status(502).json({ error: 'Ollama neatgrieza optimizēto promptu' });
+    }
+
+    const optimizedPrompt = data.response.trim();
+    console.log('✅ Prompts veiksmīgi optimizēts!');
     res.json({ optimizedPrompt });
-  } catch (error) {
-    console.error('Prompt optimization error:', error);
-    res.status(500).json({ error: 'Failed to optimize prompt' });
+
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.error('❌ Optimizēšanas pieprasījuma laiks beidzās (Timeout)');
+      return res.status(504).json({ error: 'Optimizēšana prasīja pārāk ilgu laiku' });
+    }
+    console.error('❌ Servera kļūda /api/optimize-prompt:', error.message || error);
+    res.status(500).json({ error: 'Kļūda optimizējot promptu', details: error.message });
   }
 });
 
-// Style Transfer ar ComfyUI
+// 3. Style Transfer ar ComfyUI
 app.post(
   '/api/style-transfer',
   upload.fields([
@@ -145,6 +179,7 @@ app.post(
     }
 
     try {
+      console.log('🔄 Sākam Style Transfer apstrādi...');
       await fs.mkdir(COMFY_INPUT, { recursive: true });
 
       const targetName = `style-target-${Date.now()}-${targetFile.originalname}`;
@@ -178,29 +213,18 @@ Do not copy the subject or objects from reference_image2.
 
       let finalPrompt = basePrompt;
       if (extraPrompt) {
-        try {
-          const optimizedExtraPrompt = await new Promise((resolve) => {
-            exec(
-              `ollama run qwen3-coder:30b "Optimize this prompt for image generation: ${extraPrompt}"`,
-              (error, stdout) => {
-                if (error) resolve(extraPrompt);
-                else resolve(stdout.trim());
-              }
-            );
-          });
-          finalPrompt = `${basePrompt}\n\nAdditional instructions:\n${optimizedExtraPrompt}`;
-        } catch {
-          finalPrompt = `${basePrompt}\n\nAdditional instructions:\n${extraPrompt}`;
-        }
+        finalPrompt = `${basePrompt}\n\nAdditional instructions:\n${extraPrompt}`;
       }
 
       workflow['92:113'].inputs.text = finalPrompt;
 
+      console.log('🔄 Nosūtam darbu uz ComfyUI rindu...');
       const queued = await queuePrompt(workflow);
       if (!queued.prompt_id) {
         throw new Error(`ComfyUI did not return prompt_id: ${JSON.stringify(queued)}`);
       }
 
+      console.log(`⏳ Gaidām ComfyUI rezultātu (ID: ${queued.prompt_id})...`);
       const result = await waitForResult(queued.prompt_id);
       const output = result.outputs?.['94'];
 
@@ -215,6 +239,7 @@ Do not copy the subject or objects from reference_image2.
         `&subfolder=${encodeURIComponent(generatedImage.subfolder ?? '')}` +
         `&type=${encodeURIComponent(generatedImage.type ?? 'output')}`;
 
+      console.log('✅ Style Transfer pabeigts veiksmīgi!');
       res.json({
         success: true,
         promptId: queued.prompt_id,
@@ -223,11 +248,52 @@ Do not copy the subject or objects from reference_image2.
         styleStrength,
       });
     } catch (error: any) {
-      console.error('Style transfer error:', error);
+      console.error('❌ Style transfer error:', error);
       res.status(500).json({ error: error.message || 'Style transfer failed' });
+    } finally {
+      // Sakopjam pagaidu failus no uploads/
+      if (targetFile?.path) await fs.unlink(targetFile.path).catch(() => { });
+      if (styleFile?.path) await fs.unlink(styleFile.path).catch(() => { });
     }
   }
 );
+
+// 4. Droša un bezmaksas tulkošana izmantojot MyMemory API
+app.post('/api/translate', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ error: 'Trūkst prompta teksta tulkošanai' });
+    }
+
+    console.log('🔄 Tulkojam tekstu ar MyMemory API...');
+
+    const isLatvian = /[āčēģīķļņšūž]/i.test(prompt);
+    const langPair = isLatvian ? 'lv|en' : 'en|lv';
+
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(prompt)}&langpair=${encodeURIComponent(langPair)}`;
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`MyMemory API kļūda: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    if (data && data.responseData && data.responseData.translatedText) {
+      const translatedText = data.responseData.translatedText.trim();
+      console.log('✅ Prompts veiksmīgi pārtulkots!');
+      return res.json({ translatedPrompt: translatedText });
+    }
+
+    throw new Error('Neizdevās saņemt tulkojumu no MyMemory');
+
+  } catch (error: any) {
+    console.error('❌ Servera kļūda /api/translate:', error.message || error);
+    res.status(500).json({ error: 'Kļūda tulkojot promptu', details: error.message });
+  }
+});
 
 // Servera palaišana uz visu saskarņu adresi (0.0.0.0)
 app.listen(PORT, '0.0.0.0', () => {
