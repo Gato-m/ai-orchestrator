@@ -8,6 +8,7 @@ interface ServerStatus {
   nodeServer: boolean;
   frontendServer: boolean;
   comfyServer: boolean;
+  ollamaServer: boolean;
 }
 
 function App() {
@@ -33,7 +34,8 @@ function App() {
   const [serverStatus, setServerStatus] = useState<ServerStatus>({
     nodeServer: false,
     frontendServer: true,
-    comfyServer: false
+    comfyServer: false,
+    ollamaServer: false
   });
 
   const checkServersHealth = async () => {
@@ -79,6 +81,21 @@ function App() {
     } catch {
       setServerStatus(prev => ({ ...prev, comfyServer: false }));
     }
+
+    // 4. Ollama Server (ports 11434)
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      await fetch('http://127.0.0.1:11434/api/tags', {
+        method: 'GET',
+        mode: 'no-cors',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      setServerStatus(prev => ({ ...prev, ollamaServer: true }));
+    } catch {
+      setServerStatus(prev => ({ ...prev, ollamaServer: false }));
+    }
   };
 
   useEffect(() => {
@@ -118,50 +135,122 @@ function App() {
     }
   };
 
+  // VAIROGS: Tiešs izsaukums uz backendu
+  const executeTranslation = async (text: string): Promise<string> => {
+    try {
+      // Pirmkārt mēģinām izsaukt caur API klientu
+      let result = await apiClient.translatePrompt(text);
+
+      // Ja rezultāts ir identisks vai tukšs, sūtām tiešu HTTP pieprasījumu uz backendu
+      if (!result || result === text) {
+        console.log('🔄 [App.tsx] API klients atgrieza oriģinālu, sūtām tiešo fetch uz localhost:3000...');
+        const response = await fetch('http://localhost:3000/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: text })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          result = data.translatedPrompt || data.translatedText || data.translation || text;
+        }
+      }
+      return result || text;
+    } catch (err) {
+      console.error('❌ Kļūda tulkošanas izpildē:', err);
+      return text;
+    }
+  };
+
+  // 1. STILA ANALĪZE + AUTOMĀTISKĀ TULKOŠANA
   const handleAnalyzeStyle = async () => {
     if (!styleImage) return;
     setProcessingState(prev => ({ ...prev, isAnalyzing: true, error: null }));
     try {
+      console.log('🔄 Sākam stila analīzi...');
       const analysisText = await apiClient.analyzeStyle(styleImage);
-      setEnhancedPrompt(analysisText);
-      setCurrentPrompt(analysisText);
+
+      const cleanAnalysis = analysisText
+        .trim()
+        .replace(/^["'“`]+|["'”`]+$/g, '')
+        .replace(/^Artistic style:\s*/i, '');
+
+      console.log('👉 [Frontend] Veicam automātisko EN -> LV tulkošanu saņemtajai analīzei...');
+      setIsTranslating(true);
+
+      const translatedText = await executeTranslation(cleanAnalysis);
+
+      console.log('✅ [Frontend] Iestatām galīgo tekstu:', translatedText);
+      setEnhancedPrompt(translatedText);
+      setCurrentPrompt(translatedText);
+
     } catch (error: any) {
+      console.error('❌ Stila analīzes vai tulkošanas kļūda:', error);
       setProcessingState(prev => ({ ...prev, error: error.message || 'Kļūda stila analīzē' }));
     } finally {
+      setIsTranslating(false);
       setProcessingState(prev => ({ ...prev, isAnalyzing: false }));
     }
   };
 
-  const handleTranslatePrompt = async () => {
-    if (!enhancedPrompt) return;
+  // 2. MANUĀLĀ TULKOŠANA (POGA)
+  const handleTranslatePrompt = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+
+    const textToTranslate = enhancedPrompt || (currentPrompt !== 'No prompt available' ? currentPrompt : '');
+
+    if (!textToTranslate || !textToTranslate.trim()) {
+      console.warn('⚠️ Nav teksta ko tulkot!');
+      return;
+    }
+
+    console.log('👉 [Frontend] Sūtām tulkošanas pieprasījumu:', textToTranslate);
     setIsTranslating(true);
     setProcessingState(prev => ({ ...prev, error: null }));
+
     try {
-      const result = await apiClient.translatePrompt(enhancedPrompt);
-      setEnhancedPrompt(result.translatedPrompt);
-      setCurrentPrompt(result.translatedPrompt);
+      const translatedText = await executeTranslation(textToTranslate);
+      console.log('✅ [Frontend] Saņemts tulkojums:', translatedText);
+
+      if (translatedText) {
+        setEnhancedPrompt(translatedText);
+        setCurrentPrompt(translatedText);
+      }
     } catch (error: any) {
+      console.error('❌ [Frontend] Kļūda tulkojot:', error);
       setProcessingState(prev => ({ ...prev, error: error.message || 'Kļūda tulkojot' }));
     } finally {
       setIsTranslating(false);
     }
   };
 
-  const handleOptimizePrompt = async () => {
-    if (!enhancedPrompt) return;
+  // 3. PROMPTA OPTIMIZĒŠANA
+  const handleOptimizePrompt = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+
+    const textToOptimize = enhancedPrompt || (currentPrompt !== 'No prompt available' ? currentPrompt : '');
+
+    if (!textToOptimize || !textToOptimize.trim()) return;
+
+    console.log('👉 [Frontend] Sūtām optimizēšanas pieprasījumu:', textToOptimize);
     setProcessingState(prev => ({ ...prev, isOptimizing: true, error: null }));
+
     try {
-      const result = await apiClient.optimizePrompt(enhancedPrompt);
-      const textResult = result.optimizedPrompt || (result as any).optimized_prompt || enhancedPrompt;
+      const result = await apiClient.optimizePrompt(textToOptimize);
+      const textResult = result.optimizedPrompt || (result as any).optimized_prompt || textToOptimize;
+
+      console.log('✅ [Frontend] Saņemts optimizētais prompts:', textResult);
       setEnhancedPrompt(textResult);
       setCurrentPrompt(textResult);
     } catch (error: any) {
+      console.error('❌ [Frontend] Kļūda optimizējot:', error);
       setProcessingState(prev => ({ ...prev, error: error.message || 'Kļūda optimizējot' }));
     } finally {
       setProcessingState(prev => ({ ...prev, isOptimizing: false }));
     }
   };
 
+  // 4. STYLE TRANSFER AR COMFYUI
   const handleStyleTransfer = async () => {
     if (!targetImage || !styleImage) return;
     setProcessingState(prev => ({ ...prev, isProcessing: true, progress: 0, error: null }));
@@ -208,6 +297,8 @@ function App() {
     };
   }, [targetImageUrl, styleImageUrl]);
 
+  const activePromptText = enhancedPrompt || (currentPrompt !== 'No prompt available' ? currentPrompt : '');
+
   return (
     <div className="min-h-screen bg-[#0d111a] text-slate-200 font-sans flex flex-col justify-between selection:bg-cyan-500 selection:text-white">
       {/* Header */}
@@ -228,7 +319,6 @@ function App() {
 
         {/* LEFT SIDEBAR (2/12) */}
         <aside className="lg:col-span-2 flex flex-col gap-6">
-          {/* Agents Panel */}
           <div className="bg-[#1a2234]/90 border border-slate-800 rounded-xl p-4 shadow-xl relative overflow-hidden group hover:border-cyan-500/30 transition-all duration-300">
             <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
             <h2 className="text-base font-semibold text-slate-300 mb-3 tracking-wider uppercase">Agents</h2>
@@ -243,31 +333,30 @@ function App() {
             </nav>
           </div>
 
-          {/* System Status Panel */}
           <div className="bg-[#1a2234]/90 border border-slate-800 rounded-xl p-4 shadow-xl relative overflow-hidden group hover:border-cyan-500/30 transition-all duration-300">
             <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent"></div>
             <h2 className="text-base font-semibold text-slate-300 mb-3 tracking-wider uppercase">System</h2>
 
             <div className="border border-slate-600/80 bg-slate-900/40 rounded-lg p-3 space-y-3">
-
-              {/* Node Server */}
               <div className="flex items-center space-x-2 text-base font-medium truncate">
                 <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-all duration-300 ${serverStatus.nodeServer ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-500/80 shadow-[0_0_6px_rgba(244,63,94,0.5)]'}`}></span>
                 <span className={`truncate ${serverStatus.nodeServer ? 'text-slate-200' : 'text-slate-500'}`}>Node Server</span>
               </div>
 
-              {/* Frontend Server */}
               <div className="flex items-center space-x-2 text-base font-medium truncate">
                 <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-all duration-300 ${serverStatus.frontendServer ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-500/80 shadow-[0_0_6px_rgba(244,63,94,0.5)]'}`}></span>
                 <span className={`truncate ${serverStatus.frontendServer ? 'text-slate-200' : 'text-slate-500'}`}>Frontend</span>
               </div>
 
-              {/* Comfy Server */}
               <div className="flex items-center space-x-2 text-base font-medium truncate">
                 <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-all duration-300 ${serverStatus.comfyServer ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-500/80 shadow-[0_0_6px_rgba(244,63,94,0.5)]'}`}></span>
                 <span className={`truncate ${serverStatus.comfyServer ? 'text-slate-200' : 'text-slate-500'}`}>Comfy Server</span>
               </div>
 
+              <div className="flex items-center space-x-2 text-base font-medium truncate">
+                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-all duration-300 ${serverStatus.ollamaServer ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-500/80 shadow-[0_0_6px_rgba(244,63,94,0.5)]'}`}></span>
+                <span className={`truncate ${serverStatus.ollamaServer ? 'text-slate-200' : 'text-slate-500'}`}>Ollama Server</span>
+              </div>
             </div>
           </div>
         </aside>
@@ -353,6 +442,7 @@ function App() {
               <h2 className="text-lg font-semibold text-slate-200">Prompt Enhancement</h2>
               <div className="flex flex-wrap gap-2">
                 <button
+                  type="button"
                   onClick={handleAnalyzeStyle}
                   disabled={processingState.isAnalyzing || !styleImage}
                   className={`px-4 py-2 rounded-md font-medium transition-all text-base shadow-md ${processingState.isAnalyzing ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'}`}
@@ -361,17 +451,19 @@ function App() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={handleOptimizePrompt}
-                  disabled={processingState.isOptimizing || !enhancedPrompt}
-                  className={`px-4 py-2 rounded-md font-medium transition-all text-base shadow-md ${processingState.isOptimizing ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/20'}`}
+                  disabled={processingState.isOptimizing || !activePromptText}
+                  className={`px-4 py-2 rounded-md font-medium transition-all text-base shadow-md ${processingState.isOptimizing || !activePromptText ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/20'}`}
                 >
                   {processingState.isOptimizing ? 'Optimizing...' : 'Optimize Prompt'}
                 </button>
 
                 <button
+                  type="button"
                   onClick={handleTranslatePrompt}
-                  disabled={isTranslating || !enhancedPrompt}
-                  className={`px-4 py-2 rounded-md font-medium transition-all text-base shadow-md ${isTranslating ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'}`}
+                  disabled={isTranslating || !activePromptText}
+                  className={`px-4 py-2 rounded-md font-medium transition-all text-base shadow-md ${isTranslating || !activePromptText ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'}`}
                 >
                   {isTranslating ? 'Translating...' : 'Translate (LV ⇄ EN)'}
                 </button>
@@ -382,7 +474,7 @@ function App() {
               <label htmlFor="prompt" className="block text-base font-medium text-slate-400 mb-2">Enhanced Prompt</label>
               <textarea
                 id="prompt"
-                rows={3}
+                rows={4}
                 value={enhancedPrompt}
                 onChange={(e) => {
                   setEnhancedPrompt(e.target.value);
@@ -401,7 +493,7 @@ function App() {
 
             <div className="mb-4">
               <p className="text-base text-slate-400 mb-1.5">Current Prompt:</p>
-              <div className="bg-slate-900/60 border border-slate-600/80 p-3.5 rounded-lg text-base text-slate-300 break-words font-mono">
+              <div className="bg-slate-900/60 border border-slate-600/80 p-3.5 rounded-lg text-base text-slate-300 break-words font-mono min-h-[50px]">
                 {currentPrompt}
               </div>
             </div>
@@ -428,6 +520,7 @@ function App() {
 
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={handleStyleTransfer}
                 disabled={processingState.isProcessing || !targetImage || !styleImage}
                 className={`px-5 py-2.5 rounded-lg font-semibold text-base transition-all flex items-center shadow-md ${processingState.isProcessing || !targetImage || !styleImage ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-slate-200 hover:bg-white text-slate-900 shadow-white/10'}`}
@@ -435,7 +528,7 @@ function App() {
                 {processingState.isProcessing ? 'Processing...' : 'Apply Style'}
               </button>
 
-              <button onClick={handleReset} className="px-4 py-2.5 rounded-lg font-medium bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors text-base border border-slate-600/80">
+              <button type="button" onClick={handleReset} className="px-4 py-2.5 rounded-lg font-medium bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors text-base border border-slate-600/80">
                 Reset All
               </button>
             </div>

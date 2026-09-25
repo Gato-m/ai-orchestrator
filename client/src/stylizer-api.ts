@@ -138,25 +138,40 @@ export class StylizerAPI {
   /**
    * Tulko promptu (LV <-> EN)
    */
-  async translatePrompt(prompt: string): Promise<{ translatedPrompt: string }> {
+  async translatePrompt(prompt: string): Promise<string> {
+    if (!prompt || !prompt.trim()) return '';
+
     try {
-      const response = await fetch(`${this.baseUrl}/api/translate`, {
+      console.log('👉 [StylizerAPI] Sūtām pieprasījumu uz /api/translate...');
+
+      const response = await fetch('http://localhost:3000/api/translate', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt })
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to translate prompt: ${response.status}`);
+        console.error('❌ Servera kļūda HTTP status:', response.status);
+        return prompt;
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log('📦 [StylizerAPI] Saņemtie dati:', data);
+
+      // Pārbaudām visas iespējamās atslēgas
+      const result = data.translatedPrompt || data.translatedText || data.translation || data.result;
+
+      if (result && typeof result === 'string') {
+        return result;
+      }
+
+      console.warn('⚠️ [StylizerAPI] Neizdevās atrast tulkojuma lauku atbildē, atgriežam oriģinālu');
+      return prompt;
     } catch (error) {
-      console.error('Error translating prompt:', error);
-      throw error;
+      console.error('❌ [StylizerAPI] Tīkla kļūda:', error);
+      return prompt;
     }
   }
 

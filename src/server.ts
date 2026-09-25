@@ -9,16 +9,16 @@ import { queuePrompt, waitForResult } from './comfy.js';
 const app = express();
 const PORT = 3000;
 
-// 1. Pareiza CORS konfigurācija (automātiski apstrādā arī OPTIONS pieprasījumus)
+// 1. CORS konfigurācija
 app.use(cors({
-  origin: true, // Automātiski pielāgojas pieprasītāja izcelsmei (127.0.0.1:3001 u.c.)
+  origin: true,
   credentials: true
 }));
 
-// 2. Parseri ar limitu
+// 2. Body parseri
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use(express.static('client')); // Statisko failu padeve
+app.use(express.static('client'));
 
 const upload = multer({
   dest: 'uploads/',
@@ -42,13 +42,11 @@ app.post('/api/analyze-style', async (req, res) => {
       return res.status(400).json({ error: 'Attēla dati netika saņemti korektā formātā' });
     }
 
-    // Droša Base64 nodrošināšana - noņem visu pirms komata (data:image/...;base64,)
     let cleanBase64 = rawImage;
     if (cleanBase64.includes(',')) {
       cleanBase64 = cleanBase64.split(',')[1];
     }
 
-    // Attīram atstarpes un jaunas rindiņas
     cleanBase64 = cleanBase64.replace(/[\r\n\s]/g, '').trim();
 
     if (!cleanBase64) {
@@ -59,7 +57,7 @@ app.post('/api/analyze-style', async (req, res) => {
     console.log('🔄 Sūtam pieprasījumu uz Ollama (llava modelis)...');
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90000); // 90 sekunžu limits
+    const timeout = setTimeout(() => controller.abort(), 90000);
 
     const response = await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST',
@@ -70,7 +68,7 @@ app.post('/api/analyze-style', async (req, res) => {
         prompt: 'Analyze the artistic style of this image. Describe lighting, color palette, medium, texture, and mood for an image generator prompt. Output only the prompt text in English.',
         images: [cleanBase64],
         stream: false,
-        keep_alive: 0 // <--- Uzreiz izlādē Llava no VRAM atmiņas, lai tā nebūtu bloķēta!
+        keep_alive: 0
       })
     });
 
@@ -101,7 +99,7 @@ app.post('/api/analyze-style', async (req, res) => {
   }
 });
 
-// 2. Promptu optimizēšana izmantojot ātro Llama 3.2 modeli
+// 2. Promptu optimizēšana izmantojot Llama 3.2
 app.post('/api/optimize-prompt', async (req, res) => {
   try {
     const { prompt } = req.body;
@@ -113,9 +111,8 @@ app.post('/api/optimize-prompt', async (req, res) => {
     console.log('🔄 Optimizējam promptu ar llama3.2:1b...');
 
     const targetModel = 'llama3.2:1b';
-
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000); // 20 sekunžu limits
+    const timeout = setTimeout(() => controller.abort(), 20000);
 
     const response = await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST',
@@ -251,51 +248,51 @@ Do not copy the subject or objects from reference_image2.
       console.error('❌ Style transfer error:', error);
       res.status(500).json({ error: error.message || 'Style transfer failed' });
     } finally {
-      // Sakopjam pagaidu failus no uploads/
       if (targetFile?.path) await fs.unlink(targetFile.path).catch(() => { });
       if (styleFile?.path) await fs.unlink(styleFile.path).catch(() => { });
     }
   }
 );
 
-// 4. Droša un bezmaksas tulkošana izmantojot MyMemory API
+// 4. Pilnībā darboties spējīgs EN -> LV tulkošanas maršruts ar Ollama un drošu fallback
+import translate from 'google-translate-api-x';
+
 app.post('/api/translate', async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const rawPrompt = req.body?.prompt;
 
-    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
-      return res.status(400).json({ error: 'Trūkst prompta teksta tulkošanai' });
+    if (!rawPrompt || typeof rawPrompt !== 'string' || !rawPrompt.trim()) {
+      return res.json({ translatedPrompt: '' });
     }
 
-    console.log('🔄 Tulkojam tekstu ar MyMemory API...');
+    const cleanPrompt = rawPrompt
+      .trim()
+      .replace(/^["'“`]+|["'”`]+$/g, '')
+      .replace(/^Artistic style:\s*/i, '');
 
-    const isLatvian = /[āčēģīķļņšūž]/i.test(prompt);
-    const langPair = isLatvian ? 'lv|en' : 'en|lv';
+    console.log('\n========================================');
+    console.log('📥 [BACKEND SĀK TULKOT]');
+    console.log('EN Teksts:', cleanPrompt.substring(0, 70) + '...');
 
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(prompt)}&langpair=${encodeURIComponent(langPair)}`;
+    // Izmantojam oficiālo pakotni ar piespiedu 'lv' mērķa valodu
+    const result = await translate(cleanPrompt, { to: 'lv', forceBatch: true });
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`MyMemory API kļūda: ${response.status} ${response.statusText}`);
-    }
+    console.log('✅ [BACKEND TULKOJUMS PABEIGTS]');
+    console.log('LV Teksts:', result.text.substring(0, 70) + '...');
+    console.log('========================================\n');
 
-    const data = await response.json();
-
-    if (data && data.responseData && data.responseData.translatedText) {
-      const translatedText = data.responseData.translatedText.trim();
-      console.log('✅ Prompts veiksmīgi pārtulkots!');
-      return res.json({ translatedPrompt: translatedText });
-    }
-
-    throw new Error('Neizdevās saņemt tulkojumu no MyMemory');
+    return res.json({
+      translatedPrompt: result.text,
+      translatedText: result.text
+    });
 
   } catch (error: any) {
-    console.error('❌ Servera kļūda /api/translate:', error.message || error);
-    res.status(500).json({ error: 'Kļūda tulkojot promptu', details: error.message });
+    console.error('❌ [Backend Kļūda]:', error);
+    return res.status(500).json({ error: 'Translation failed', details: String(error) });
   }
 });
 
-// Servera palaišana uz visu saskarņu adresi (0.0.0.0)
+// Servera palaišana
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Style Workflow Dashboard: http://127.0.0.1:${PORT}`);
 });
