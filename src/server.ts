@@ -2,59 +2,98 @@ import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
 import fs from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import path from 'node:path';
+import FormData from 'form-data';
+import translate from 'google-translate-api-x';
 
 import { queuePrompt, waitForResult } from './comfy.js';
 
 const app = express();
 const PORT = 3000;
 
-// 1. CORS konfigurācija
-app.use(cors({
-  origin: true,
-  credentials: true
-}));
-
-// 2. Body parseri
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static('client'));
 
-const upload = multer({
-  dest: 'uploads/',
-});
+const upload = multer({ dest: 'uploads/' });
 
-const WORKFLOW_PATH = path.resolve('style-transfer.json');
+const WORKFLOW_PATH = path.resolve('ImageStylerAPI.json');
 const COMFY_INPUT = '/Users/webdev/ComfyUI-Shared/input';
 
-// Health check maršruts
+// Palīgfunkcija attēla reģistrēšanai ComfyUI vidē
+async function uploadToComfyAPI(filePath: string, filename: string): Promise<string> {
+  try {
+    const formData = new FormData();
+    formData.append('image', createReadStream(filePath), filename);
+    formData.append('overwrite', 'true');
+
+    const response = await fetch('http://127.0.0.1:8188/upload/image', {
+      method: 'POST',
+      body: formData as any,
+    });
+
+    if (response.ok) {
+      const data = (await response.json()) as { name?: string };
+      if (data.name) return data.name;
+    }
+  } catch (err: any) {
+    console.warn(`⚠️ Kļūda augšupielādējot uz ComfyUI API: ${err.message}`);
+  }
+  return filename;
+}
+
+// Rekurzīva funkcija, kas izstaigā VISU JSON koku un izlabo vērtības
+function deepFixWorkflow(obj: any, targetImg: string, styleImg: string, promptText: string) {
+  if (!obj || typeof obj !== 'object') return;
+
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+
+    // Izlabojam VAE nosaukumus visā strukturā
+    if (key === 'vae_name' && val === 'full_encoder_small_decoder.safetensors') {
+      obj[key] = 'pixel_space';
+      console.log('🔧 [Pielāgots] VAE pārsaukts uz pixel_space');
+    }
+
+    // Izlabojam mezglu 81 un 76 attēlus
+    if (key === '81' && val?.inputs) {
+      val.inputs.image = targetImg;
+      console.log(`🔧 [Pielāgots] Mezgls 81 sasaistīts ar: ${targetImg}`);
+    }
+    if (key === '76' && val?.inputs) {
+      val.inputs.image = styleImg;
+      console.log(`🔧 [Pielāgots] Mezgls 76 sasaistīts ar: ${styleImg}`);
+    }
+
+    // Izlabojam teksta promptu mezglam 92:113
+    if (key === '92:113' && val?.inputs) {
+      val.inputs.text = promptText;
+      console.log('🔧 [Pielāgots] Mezglam 92:113 iestatīts jaunais prompts');
+    }
+
+    // Rekurzīvs izsaukums apakšobjektiem un masīviem
+    if (typeof val === 'object') {
+      deepFixWorkflow(val, targetImg, styleImg, promptText);
+    }
+  }
+}
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// 1. Stila analīzes galapunkts ar Ollama (llava)
+// 1. Stila analīze ar Ollama
 app.post('/api/analyze-style', async (req, res) => {
   try {
     const rawImage = req.body.imageBase64 || req.body.image || req.body.imageData;
-
     if (!rawImage || typeof rawImage !== 'string') {
-      console.error('❌ [/api/analyze-style] Attēls netika saņemts vai nav teksta formātā');
-      return res.status(400).json({ error: 'Attēla dati netika saņemti korektā formātā' });
+      return res.status(400).json({ error: 'Attēla dati netika saņemti' });
     }
 
-    let cleanBase64 = rawImage;
-    if (cleanBase64.includes(',')) {
-      cleanBase64 = cleanBase64.split(',')[1];
-    }
-
+    let cleanBase64 = rawImage.includes(',') ? rawImage.split(',')[1] : rawImage;
     cleanBase64 = cleanBase64.replace(/[\r\n\s]/g, '').trim();
-
-    if (!cleanBase64) {
-      console.error('❌ [/api/analyze-style] Tukšs Base64 saturs');
-      return res.status(400).json({ error: 'Attēla base64 datu virkne ir tukša' });
-    }
-
-    console.log('🔄 Sūtam pieprasījumu uz Ollama (llava modelis)...');
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 90000);
@@ -75,91 +114,41 @@ app.post('/api/analyze-style', async (req, res) => {
     clearTimeout(timeout);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Ollama kļūda ${response.status}:`, errorText);
-      return res.status(502).json({ error: 'Ollama kļūda', details: errorText });
+      return res.status(502).json({ error: 'Ollama kļūda' });
     }
 
     const data = (await response.json()) as { response?: string };
-
-    if (!data.response) {
-      return res.status(502).json({ error: 'Ollama neatgrieza atbildi' });
-    }
-
-    console.log('✅ Stils veiksmīgi izanalizēts!');
-    res.json({ styleDescription: data.response.trim() });
-
+    res.json({ styleDescription: data.response?.trim() });
   } catch (error: any) {
-    if (error.name === 'AbortError') {
-      console.error('❌ [/api/analyze-style] Pieprasījuma laiks beidzās (Timeout)');
-      return res.status(504).json({ error: 'Stila analīze prasīja pārāk ilgu laiku' });
-    }
-    console.error('❌ Servera kļūda /api/analyze-style:', error.message || error);
     res.status(500).json({ error: 'Failed to analyze style', details: error.message });
   }
 });
 
-// 2. Promptu optimizēšana izmantojot Llama 3.2
+// 2. Optimizēšana
 app.post('/api/optimize-prompt', async (req, res) => {
   try {
     const { prompt } = req.body;
-
-    if (!prompt || typeof prompt !== 'string') {
-      return res.status(400).json({ error: 'Trūkst prompta teksta optimizēšanai' });
-    }
-
-    console.log('🔄 Optimizējam promptu ar llama3.2:1b...');
-
-    const targetModel = 'llama3.2:1b';
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    if (!prompt) return res.status(400).json({ error: 'Trūkst prompta' });
 
     const response = await fetch('http://127.0.0.1:11434/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
       body: JSON.stringify({
-        model: targetModel,
-        prompt: `You are an expert AI prompt engineer for image generation (Stable Diffusion / Midjourney).
-Refine and optimize the following image prompt to make it descriptive, clear, and high quality.
-Add artistic details, lighting, style terms, and composition cues if needed.
-Provide ONLY the final optimized prompt in English and nothing else. No conversational text, no quotes.
-
-Input prompt: "${prompt}"`,
+        model: 'llama3.2:1b',
+        prompt: `Refine and optimize the following image prompt for Stable Diffusion / Midjourney. Provide ONLY the final prompt in English.\n\nInput: "${prompt}"`,
         stream: false,
         keep_alive: 0
       })
     });
 
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Ollama optimizēšanas kļūda (${response.status}):`, errorText);
-      return res.status(502).json({ error: `Ollama kļūda: ${errorText}` });
-    }
-
     const data = (await response.json()) as { response?: string };
-
-    if (!data.response) {
-      return res.status(502).json({ error: 'Ollama neatgrieza optimizēto promptu' });
-    }
-
-    const optimizedPrompt = data.response.trim();
-    console.log('✅ Prompts veiksmīgi optimizēts!');
-    res.json({ optimizedPrompt });
-
+    res.json({ optimizedPrompt: data.response?.trim() });
   } catch (error: any) {
-    if (error.name === 'AbortError') {
-      console.error('❌ Optimizēšanas pieprasījuma laiks beidzās (Timeout)');
-      return res.status(504).json({ error: 'Optimizēšana prasīja pārāk ilgu laiku' });
-    }
-    console.error('❌ Servera kļūda /api/optimize-prompt:', error.message || error);
-    res.status(500).json({ error: 'Kļūda optimizējot promptu', details: error.message });
+    res.status(500).json({ error: 'Kļūda optimizējot promptu' });
   }
 });
 
-// 3. Style Transfer ar ComfyUI
+// 3. Style Transfer
 app.post(
   '/api/style-transfer',
   upload.fields([
@@ -179,20 +168,18 @@ app.post(
       console.log('🔄 Sākam Style Transfer apstrādi...');
       await fs.mkdir(COMFY_INPUT, { recursive: true });
 
-      const targetName = `style-target-${Date.now()}-${targetFile.originalname}`;
-      const styleName = `style-reference-${Date.now()}-${styleFile.originalname}`;
+      const timestamp = Date.now();
+      const safeTargetName = `target_${timestamp}.png`;
+      const safeStyleName = `style_${timestamp}.png`;
 
-      const targetPath = path.join(COMFY_INPUT, targetName);
-      const stylePath = path.join(COMFY_INPUT, styleName);
+      await fs.copyFile(targetFile.path, path.join(COMFY_INPUT, safeTargetName));
+      await fs.copyFile(styleFile.path, path.join(COMFY_INPUT, safeStyleName));
 
-      await fs.copyFile(targetFile.path, targetPath);
-      await fs.copyFile(styleFile.path, stylePath);
+      const finalTargetName = await uploadToComfyAPI(targetFile.path, safeTargetName);
+      const finalStyleName = await uploadToComfyAPI(styleFile.path, safeStyleName);
 
       const workflowText = await fs.readFile(WORKFLOW_PATH, 'utf8');
-      const workflow = JSON.parse(workflowText);
-
-      workflow['81'].inputs.image = targetName;
-      workflow['76'].inputs.image = styleName;
+      let workflow = JSON.parse(workflowText);
 
       const extraPrompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
       const rawStrength = Number(req.body?.styleStrength ?? 30);
@@ -208,25 +195,26 @@ Limit colors to 4.
 Do not copy the subject or objects from reference_image2.
 `.trim();
 
-      let finalPrompt = basePrompt;
-      if (extraPrompt) {
-        finalPrompt = `${basePrompt}\n\nAdditional instructions:\n${extraPrompt}`;
-      }
+      const finalPrompt = extraPrompt ? `${basePrompt}\n\nAdditional instructions:\n${extraPrompt}` : basePrompt;
 
-      workflow['92:113'].inputs.text = finalPrompt;
+      // Pielietojam globālo un rekurzīvo labojumu
+      deepFixWorkflow(workflow, finalTargetName, finalStyleName, finalPrompt);
 
-      console.log('🔄 Nosūtam darbu uz ComfyUI rindu...');
+      console.log('🔄 Nosūtam workflow uz ComfyUI...');
       const queued = await queuePrompt(workflow);
+
       if (!queued.prompt_id) {
-        throw new Error(`ComfyUI did not return prompt_id: ${JSON.stringify(queued)}`);
+        throw new Error(`ComfyUI neatgrieza prompt_id: ${JSON.stringify(queued)}`);
       }
 
-      console.log(`⏳ Gaidām ComfyUI rezultātu (ID: ${queued.prompt_id})...`);
+      console.log(`⏳ Gaidām ComfyUI aprēķinu (ID: ${queued.prompt_id})...`);
       const result = await waitForResult(queued.prompt_id);
-      const output = result.outputs?.['94'];
+
+      // Mēģinām atrast izvades attēlu no mezgla '94' vai pirmā pieejamā mezgla
+      const output = result.outputs?.['94'] || Object.values(result.outputs || {})[0];
 
       if (!output?.images?.length) {
-        throw new Error('ComfyUI finished without an output image');
+        throw new Error('ComfyUI pabeidza darbu, bet nesaglabāja gala attēlu');
       }
 
       const generatedImage = output.images[0];
@@ -236,7 +224,7 @@ Do not copy the subject or objects from reference_image2.
         `&subfolder=${encodeURIComponent(generatedImage.subfolder ?? '')}` +
         `&type=${encodeURIComponent(generatedImage.type ?? 'output')}`;
 
-      console.log('✅ Style Transfer pabeigts veiksmīgi!');
+      console.log('✅ Style Transfer pabeigts!');
       res.json({
         success: true,
         promptId: queued.prompt_id,
@@ -244,8 +232,9 @@ Do not copy the subject or objects from reference_image2.
         filename: generatedImage.filename,
         styleStrength,
       });
+
     } catch (error: any) {
-      console.error('❌ Style transfer error:', error);
+      console.error('❌ Kļūda Style Transfer procesā:', error);
       res.status(500).json({ error: error.message || 'Style transfer failed' });
     } finally {
       if (targetFile?.path) await fs.unlink(targetFile.path).catch(() => { });
@@ -254,45 +243,19 @@ Do not copy the subject or objects from reference_image2.
   }
 );
 
-// 4. Pilnībā darboties spējīgs EN -> LV tulkošanas maršruts ar Ollama un drošu fallback
-import translate from 'google-translate-api-x';
-
+// 4. Tulkošana
 app.post('/api/translate', async (req, res) => {
   try {
     const rawPrompt = req.body?.prompt;
+    if (!rawPrompt || typeof rawPrompt !== 'string') return res.json({ translatedPrompt: '' });
 
-    if (!rawPrompt || typeof rawPrompt !== 'string' || !rawPrompt.trim()) {
-      return res.json({ translatedPrompt: '' });
-    }
-
-    const cleanPrompt = rawPrompt
-      .trim()
-      .replace(/^["'“`]+|["'”`]+$/g, '')
-      .replace(/^Artistic style:\s*/i, '');
-
-    console.log('\n========================================');
-    console.log('📥 [BACKEND SĀK TULKOT]');
-    console.log('EN Teksts:', cleanPrompt.substring(0, 70) + '...');
-
-    // Izmantojam oficiālo pakotni ar piespiedu 'lv' mērķa valodu
-    const result = await translate(cleanPrompt, { to: 'lv', forceBatch: true });
-
-    console.log('✅ [BACKEND TULKOJUMS PABEIGTS]');
-    console.log('LV Teksts:', result.text.substring(0, 70) + '...');
-    console.log('========================================\n');
-
-    return res.json({
-      translatedPrompt: result.text,
-      translatedText: result.text
-    });
-
+    const result = await translate(rawPrompt.trim(), { to: 'lv', forceBatch: true });
+    return res.json({ translatedPrompt: result.text });
   } catch (error: any) {
-    console.error('❌ [Backend Kļūda]:', error);
-    return res.status(500).json({ error: 'Translation failed', details: String(error) });
+    return res.status(500).json({ error: 'Translation failed' });
   }
 });
 
-// Servera palaišana
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Style Workflow Dashboard: http://127.0.0.1:${PORT}`);
+  console.log(`🚀 Serveris palaists: http://127.0.0.1:${PORT}`);
 });

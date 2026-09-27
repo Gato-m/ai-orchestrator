@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StylizerAPI } from './stylizer-api';
 import { ProcessingState } from './types';
 
@@ -21,6 +21,8 @@ function App() {
   const [currentPrompt, setCurrentPrompt] = useState<string>('No prompt available');
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
 
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
   const [processingState, setProcessingState] = useState<ProcessingState>({
     isAnalyzing: false,
     isOptimizing: false,
@@ -37,6 +39,14 @@ function App() {
     comfyServer: false,
     ollamaServer: false
   });
+
+  // Automātiski pielāgo tekstlodziņa augstumu atbilstoši saturam
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [enhancedPrompt]);
 
   const checkServersHealth = async () => {
     // 1. Node Server
@@ -381,11 +391,11 @@ function App() {
                 )}
               </div>
               {targetImageUrl ? (
-                <div className="flex justify-center items-center h-52 bg-slate-900/50 rounded-lg overflow-hidden border border-slate-600/80">
+                <div className="flex justify-center items-center h-90 bg-slate-900/50 rounded-lg overflow-hidden border border-slate-600/80">
                   <img src={targetImageUrl} alt="Target" className="max-h-full max-w-full object-contain" />
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center border border-dashed border-slate-600/80 rounded-lg p-6 text-center h-52 bg-slate-900/30 hover:border-slate-500 transition-colors">
+                <div className="flex flex-col items-center justify-center border border-dashed border-slate-600/80 rounded-lg p-6 text-center h-90 bg-slate-900/30 hover:border-slate-500 transition-colors">
                   <svg className="h-10 w-10 text-slate-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
@@ -415,11 +425,11 @@ function App() {
                 )}
               </div>
               {styleImageUrl ? (
-                <div className="flex justify-center items-center h-52 bg-slate-900/50 rounded-lg overflow-hidden border border-slate-600/80">
+                <div className="flex justify-center items-center h-90 bg-slate-900/50 rounded-lg overflow-hidden border border-slate-600/80">
                   <img src={styleImageUrl} alt="Style" className="max-h-full max-w-full object-contain" />
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center border border-dashed border-slate-600/80 rounded-lg p-6 text-center h-52 bg-slate-900/30 hover:border-slate-500 transition-colors">
+                <div className="flex flex-col items-center justify-center border border-dashed border-slate-600/80 rounded-lg p-6 text-center h-90 bg-slate-900/30 hover:border-slate-500 transition-colors">
                   <svg className="h-10 w-10 text-slate-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
@@ -473,6 +483,7 @@ function App() {
             <div>
               <label htmlFor="prompt" className="block text-base font-medium text-slate-400 mb-2">Enhanced Prompt</label>
               <textarea
+                ref={textareaRef}
                 id="prompt"
                 rows={4}
                 value={enhancedPrompt}
@@ -480,7 +491,7 @@ function App() {
                   setEnhancedPrompt(e.target.value);
                   setCurrentPrompt(e.target.value);
                 }}
-                className="w-full bg-slate-900/80 border border-slate-600/80 rounded-lg p-3 text-base text-slate-200 focus:outline-none focus:border-cyan-500/60 transition-colors resize-none placeholder:text-slate-600"
+                className="w-full bg-slate-900/80 border border-slate-600/80 rounded-lg p-3 text-base text-slate-200 focus:outline-none focus:border-cyan-500/60 transition-colors resize-none overflow-hidden placeholder:text-slate-600 min-h-[100px]"
                 placeholder="Enhanced prompt will appear after analyzing the style image, or write your own in LV/EN..."
               />
             </div>

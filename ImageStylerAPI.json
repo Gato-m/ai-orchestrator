@@ -14,7 +14,7 @@
   },
   "76": {
     "inputs": {
-      "image": "test-style.jpg"
+      "image": "937438c560ada1c83317f2c11b3454b0.jpg"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -23,18 +23,31 @@
   },
   "81": {
     "inputs": {
-      "image": "person.jpg"
+      "image": "portrait.jpeg"
     },
     "class_type": "LoadImage",
     "_meta": {
       "title": "Load Image"
     }
   },
-  "94": {
+  "132": {
     "inputs": {
       "filename_prefix": "Flux2-Klein-4b-base",
       "images": [
         "92:104",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "135": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "132",
         0
       ]
     },
@@ -136,7 +149,7 @@
   },
   "75:73": {
     "inputs": {
-      "noise_seed": 1111481275002038
+      "noise_seed": 1074737227034160
     },
     "class_type": "RandomNoise",
     "_meta": {
@@ -166,7 +179,7 @@
   },
   "75:74": {
     "inputs": {
-      "text": "Transfer the visual style of the first image to the second image.\nPreserve the subject, identity, pose, composition and main visual content of the second image.\nApply the colors, materials, lighting, rendering language, shapes and atmosphere of the first image.",
+      "text": "Create xmas night with stars and moon in children drawing book style",
       "clip": [
         "75:71",
         0
@@ -342,7 +355,7 @@
   },
   "92:105": {
     "inputs": {
-      "noise_seed": 91521019200897
+      "noise_seed": 205448002283101
     },
     "class_type": "RandomNoise",
     "_meta": {
@@ -440,7 +453,7 @@
   },
   "92:113": {
     "inputs": {
-      "text": "Transfer the visual style of reference_image2 to the person in reference_image1.\n\nPreserve the identity, face, hairstyle, body, pose and overall composition of reference_image1.\n\nUse reference_image2 only as the source of visual style, including its color palette, graphic language, lighting, materials, shapes and editorial aesthetic.\n\nkeep more person - 70%, stylize - 30%\n\nLimit colors to 4.\n\nDo not copy the subject or objects from reference_image2.",
+      "text": "Transfer the visual style of reference_image2 to the person in reference_image1.\n\nPreserve the identity, face, hairstyle of reference_image1.\n\nRemove person ftom reference_image2.\n\nUse reference_image2 as the source of visual style, including its color palette, graphic language, lighting, materials, shapes, composition and editorial aesthetic. \n\nremove all texts from image.\n\nDo not copy the subject or objects from reference_image2. replace reference_image2 person with reference_image1 person ",
       "clip": [
         "92:111",
         0
